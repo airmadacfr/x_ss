@@ -21,39 +21,23 @@ export default async function handler(req, res) {
 
     const data = await synRes.json();
 
-    // Extract image URLs from the syndication response
+    // Extract image URLs — use ONE source only, in priority order
+    // to avoid duplicates (photos, mediaDetails and entities all contain the same images)
     const images = [];
 
-    // photos array
-    if (data.photos && Array.isArray(data.photos)) {
-      data.photos.forEach(p => {
-        if (p.url) images.push(p.url);
-      });
-    }
-
-    // mediaDetails
-    if (data.mediaDetails && Array.isArray(data.mediaDetails)) {
+    if (data.mediaDetails && Array.isArray(data.mediaDetails) && data.mediaDetails.length > 0) {
+      // Best source: mediaDetails has type info
       data.mediaDetails.forEach(m => {
-        if (m.media_url_https && m.type === 'photo') {
-          images.push(m.media_url_https + '?name=large');
-        }
-        // video thumbnail
-        if (m.type === 'video' && m.media_url_https) {
+        if (m.media_url_https && (m.type === 'photo' || m.type === 'video')) {
           images.push(m.media_url_https + '?name=large');
         }
       });
+    } else if (data.photos && Array.isArray(data.photos) && data.photos.length > 0) {
+      // Fallback: photos array
+      data.photos.forEach(p => { if (p.url) images.push(p.url); });
     }
+    // Never use entities.media as it duplicates the above
 
-    // entities.media
-    if (data.entities?.media) {
-      data.entities.media.forEach(m => {
-        if (m.media_url_https && !images.includes(m.media_url_https)) {
-          images.push(m.media_url_https + '?name=large');
-        }
-      });
-    }
-
-    // Deduplicate
     const unique = [...new Set(images)];
 
     return res.status(200).json({
